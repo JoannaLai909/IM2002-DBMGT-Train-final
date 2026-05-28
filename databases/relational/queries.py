@@ -81,6 +81,9 @@ def example_query() -> dict:
 
 # ── NATIONAL RAIL AVAILABILITY ────────────────────────────────────────────────
 
+# Find all available national rail schedules
+# between origin and destination stations.
+
 def query_national_rail_availability(
     origin_id: str,
     destination_id: str,
@@ -354,6 +357,8 @@ def query_available_seats(
             return available
 
 
+# Group seats by row number.
+# Prefer seats in the same row before considering nearby rows.
 def auto_select_adjacent_seats(available_seats: list[dict], count: int) -> list[str]:
     """
     Select `count` seats that are as close together as possible (same row preferred,
@@ -465,6 +470,11 @@ def query_user_bookings(user_email: str) -> dict:
             }
 
 
+# payments.booking_id may reference:
+# - bookings.booking_id (national rail)
+# - metro_travel_history.trip_id (metro)
+#
+# LEFT JOIN is used to support both systems.
 def query_payment_info(booking_id: str) -> Optional[dict]:
 
     sql = """
@@ -545,7 +555,7 @@ def execute_booking(
             )
 
             if cur.fetchone():
-                conn.rollback()
+                conn.rollback()        
                 return False, "Seat is already booked."
 
             # 2. Get stop order to calculate stops travelled
