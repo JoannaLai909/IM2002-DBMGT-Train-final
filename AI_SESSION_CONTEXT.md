@@ -43,16 +43,48 @@ TransitFlow is a Python-based AI chat assistant for a fictional transit operator
           return [dict(record) for record in result]
   ```
 
+
 ## Agreed Relational Schema
 
-<!-- ============================================================
-  FILL THIS IN after your team completes the schema design workshop.
-  Paste your final CREATE TABLE statements here.
-  ============================================================ -->
-
 ```sql
--- TODO: paste your final schema.sql contents here after team review
+registered_users(user_id, full_name, email, password, phone, date_of_birth, secret_question, secret_answer, registered_at, is_active)
+
+metro_stations(station_id, name, lines, is_interchange_metro, interchange_metro_lines, is_interchange_national_rail, interchange_national_rail_station_id)
+
+national_rail_stations(station_id, name, lines, is_interchange_national_rail, interchange_national_rail_lines, is_interchange_metro, interchange_metro_station_id)
+
+metro_schedules(schedule_id, line, direction, origin_station_id, destination_station_id, first_train_time, last_train_time, base_fare_usd, per_stop_rate_usd, frequency_min, operates_on)
+
+metro_schedule_stops(schedule_id, station_id, stop_order, travel_time_from_origin_min)
+
+national_rail_schedules(schedule_id, line, service_type, direction, origin_station_id, destination_station_id, first_train_time, last_train_time, fare_classes, frequency_min, operates_on)
+
+national_rail_schedule_stops(schedule_id, station_id, stop_order, travel_time_from_origin_min)
+
+national_rail_seat_layouts(layout_id, schedule_id, coaches)
+
+bookings(booking_id, user_id, schedule_id, origin_station_id, destination_station_id, travel_date, departure_time, ticket_type, fare_class, coach, seat_id, stops_travelled, amount_usd, status, booked_at, travelled_at)
+
+metro_travel_history(trip_id, user_id, schedule_id, origin_station_id, destination_station_id, travel_date, ticket_type, stops_travelled, amount_usd, status, purchased_at, travelled_at)
+
+payments(payment_id, booking_id, amount_usd, method, status, paid_at)
+
+feedback(feedback_id, booking_id, user_id, rating, comment, submitted_at)
+
+policy_documents(id, title, category, content, embedding, source_file, created_at)
+
 ```
+
+### JSONB Fields
+
+- metro_stations.lines
+- metro_stations.interchange_metro_lines
+- national_rail_stations.lines
+- national_rail_stations.interchange_national_rail_lines
+- metro_schedules.operates_on
+- national_rail_schedules.fare_classes
+- national_rail_schedules.operates_on
+- national_rail_seat_layouts.coaches
 
 ## Agreed Graph Schema
 
@@ -116,20 +148,99 @@ def query_station_connections(station_id: str) -> list[dict]: ...
 
 <!-- Add entries as you make decisions. Format: "Decision: X. Why: Y." -->
 
-- [ ] Schema design: TODO — add your table/column decisions here
-- [ ] Graph schema: TODO — add your node label and relationship type decisions here
-- [ ] (example) Metro schedule stop ordering: using `jsonb_array_elements` approach — easier to debug than containment operators
+- [x] Relational schema is finalized and implemented in `schema.sql`.
+- [x] Schedule stop ordering is stored in separate stop tables using `stop_order`.
+
+
+- [x] Payments table supports both:
+  - bookings.booking_id
+  - metro_travel_history.trip_id
+  via flexible booking_id reference.
+
+- [x] Seat layouts are stored using JSONB
+  to support nested coach + seat structures.
+
+- [x] Fare classes are stored as JSONB
+  because each schedule may contain
+  multiple fare types.
+
+- [x] execute_booking() uses PostgreSQL transaction handling
+  with commit / rollback.
+
+- [x] query_payment_info() uses LEFT JOIN
+  to support both metro and national rail payments.
+
+- [x] Booking status values are:
+  - confirmed
+  - cancelled
+  - completed
+
+- [x] Payment status values are:
+  - pending
+  - completed
+  - failed
+  - paid
+  - refunded
 
 ## Prompts That Worked
 
 <!-- Share prompts that produced good output so teammates can reuse them. -->
 
-### Schema design prompt that worked:
-```
-TODO — add a prompt here after your schema design workshop
+### Query implementation prompt that worked:
+```text
+Implement this PostgreSQL query function.
+
+Rules:
+- Use only the schema provided
+- Use only table and column names from the agreed team schema
+- Do not invent table names or column names
+- Use _connect() helper
+- Use psycopg2.extras.RealDictCursor
+- Match the function signature exactly
+- Do not change parameter names or return types
+- Return [] or None for empty results
+- Use %s placeholders for SQL parameters
+- Never use Python string formatting inside SQL
+- Add short comments for important logic only
+
+Schema:
+[paste relevant schema from AI_SESSION_CONTEXT.md]
+
+Function:
+[paste function stub]
 ```
 
-### Query implementation prompt that worked:
-```
-TODO — add after implementing your first function
-```
+## Architecture Notes
+
+TransitFlow uses a hybrid database design:
+
+- PostgreSQL relational tables are used for:
+  - bookings
+  - payments
+  - schedules
+  - users
+
+- PostgreSQL JSONB fields are used for:
+  - seat layouts
+  - fare classes
+  - operating days
+
+- Neo4j is used for:
+  - route graph traversal
+  - shortest path queries
+  - interchange analysis
+
+
+### Booking Workflow
+
+National rail booking flow:
+
+1. Validate schedule route direction
+2. Validate seat availability
+3. Calculate fare using fare_classes JSONB
+4. Find seat coach from seat layout JSONB
+5. Insert booking record
+6. Insert payment record
+7. Commit transaction
+
+Rollback is triggered automatically if any step fails.
