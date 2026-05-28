@@ -142,10 +142,10 @@ CREATE TABLE metro_travel_history (
 
 CREATE TABLE payments (
     payment_id VARCHAR(20) PRIMARY KEY,
-    booking_id VARCHAR(20) REFERENCES bookings(booking_id),
+    booking_id VARCHAR(20),
     amount_usd NUMERIC(10,2) NOT NULL CHECK (amount_usd >= 0),
     method VARCHAR(30),
-    status VARCHAR(30) CHECK (status IN ('pending', 'completed', 'failed', 'paid')),
+    status VARCHAR(30) CHECK (status IN ('pending', 'completed', 'failed', 'paid', 'refunded')),
     paid_at TIMESTAMPTZ
 );
 
