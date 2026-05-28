@@ -145,7 +145,7 @@ CREATE TABLE payments (
     booking_id VARCHAR(20) REFERENCES bookings(booking_id),
     amount_usd NUMERIC(10,2) NOT NULL CHECK (amount_usd >= 0),
     method VARCHAR(30),
-    status VARCHAR(30) CHECK (status IN ('pending', 'completed', 'failed')),
+    status VARCHAR(30) CHECK (status IN ('pending', 'completed', 'failed', 'paid')),
     paid_at TIMESTAMPTZ
 );
 
