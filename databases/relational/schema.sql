@@ -40,6 +40,8 @@ CREATE TABLE registered_users (
     is_active BOOLEAN DEFAULT TRUE
 );
 
+-- VARCHAR IDs are used instead of SERIAL
+-- to support externally-defined transit identifiers.
 CREATE TABLE metro_stations (
     station_id VARCHAR(10) PRIMARY KEY,
     name TEXT NOT NULL,
@@ -104,6 +106,9 @@ CREATE TABLE national_rail_schedule_stops (
     PRIMARY KEY (schedule_id, station_id)
 );
 
+-- Soft delete strategy:
+-- records are retained and status is updated
+-- instead of physically deleting rows.
 CREATE TABLE bookings (
     booking_id VARCHAR(20) PRIMARY KEY,
     user_id VARCHAR(10) REFERENCES registered_users(user_id),
