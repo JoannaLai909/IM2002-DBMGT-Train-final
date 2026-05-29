@@ -181,6 +181,14 @@ def query_station_connections(station_id: str) -> list[dict]: ...
   - failed
   - paid
   - refunded
+- [x] register_user() and update_password() store passwords using salted PBKDF2-HMAC-SHA256 hashes instead of plain text.
+
+- [x] login_user() verifies PBKDF2 password hashes and includes a legacy compatibility path for seeded mock users.
+
+- [x] query_national_rail_availability() calculates available_seats from national_rail_seat_layouts.coaches JSONB minus already-booked seats.
+
+- [x] execute_cancellation() uses a transaction and row locking with FOR UPDATE to prevent duplicate cancellation updates.
+
 
 ## Prompts That Worked
 
