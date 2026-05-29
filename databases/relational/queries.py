@@ -477,22 +477,45 @@ def auto_select_adjacent_seats(available_seats: list[dict], count: int) -> list[
 # ── USER & BOOKING QUERIES ────────────────────────────────────────────────────
 
 def query_user_profile(user_email: str) -> Optional[dict]:
+    """
+    Return a registered user's public profile.
 
+    Args:
+        user_email: Email address used to identify the registered user.
+
+    Returns:
+        A user profile dict if the email exists; otherwise None.
+        Password fields are intentionally excluded from the returned result.
+    """
     sql = """
-        SELECT *
+        SELECT
+            user_id,
+            full_name,
+            email,
+            phone,
+            date_of_birth,
+            registered_at,
+            is_active
         FROM registered_users
         WHERE email = %s
     """
-    #build PostgreSQL connection
+
     with _connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, (user_email,))
             row = cur.fetchone()
 
-            if row:
-                return dict(row)
+            if not row:
+                return None
 
-            return None
+            result = dict(row)
+
+            if result.get("date_of_birth"):
+                result["year_of_birth"] = result["date_of_birth"].year
+            else:
+                result["year_of_birth"] = None
+
+            return result
 
 
 def query_user_bookings(user_email: str) -> dict:
