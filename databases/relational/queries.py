@@ -42,7 +42,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Move upward to project root directory
 PROJECT_ROOT = os.path.dirname(os.path.dirname(CURRENT_DIR))
 
-# 將 project root 加入 Python 搜尋路徑，以便導入 config.py
+# Add project root to sys.path for imports
 sys.path.insert(0, PROJECT_ROOT)
 
 from skeleton.config import PG_DSN, VECTOR_TOP_K, VECTOR_SIMILARITY_THRESHOLD
