@@ -194,6 +194,7 @@ def query_station_connections(station_id: str) -> list[dict]: ...
 
 - [x] execute_cancellation() uses a transaction and row locking with FOR UPDATE to prevent duplicate cancellation updates.
 
+- [x] query_cheapest_route() is deferred to the PostgreSQL layer because fare pricing metrics reside in relational tables.
 
 ## Prompts That Worked
 
