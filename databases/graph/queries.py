@@ -177,7 +177,11 @@ def query_interchange_path(origin_id: str, destination_id: str) -> dict:
                 (start)-[:CONNECTED_TO|INTERCHANGE_TO*..20]->(end)
             )
 
-            RETURN p
+            RETURN p, 
+                   reduce(total = 0, r IN relationships(p) | 
+                      total + coalesce(r.travel_time_min, r.transfer_time_min, 0)
+                   ) AS actual_total_time
+
             """, {
                 "origin_id": origin_id,
                 "destination_id": destination_id
@@ -194,7 +198,6 @@ def query_interchange_path(origin_id: str, destination_id: str) -> dict:
                 }
 
             path = record["p"]
-
             nodes = list(path.nodes)
             rels = list(path.relationships)
 
@@ -215,7 +218,7 @@ def query_interchange_path(origin_id: str, destination_id: str) -> dict:
                 "found": True,
                 "stations": stations,
                 "interchanges": interchanges,
-                "total_time_min": len(rels)
+                "total_time_min": record["actual_total_time"] # 修正點：改拿精準加總的時間
             }
 
 
@@ -228,7 +231,7 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
 
             result = session.run("""
             MATCH (s:Station {station_id: $id})
-            MATCH (s)-[:CONNECTED_TO*1..$hops]-(n)
+            MATCH path = (s)-[:CONNECTED_TO*1..$hops]-(n)
 
             RETURN DISTINCT n, length(path) AS hops_away
             """, {
@@ -244,7 +247,7 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
                 }
                 for r in result
             ]
-
+        
 
 # ── STATION CONNECTIONS ───────────────────────────────────────────────────────
 
