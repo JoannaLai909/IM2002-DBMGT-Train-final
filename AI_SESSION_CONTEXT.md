@@ -95,14 +95,19 @@ policy_documents(id, title, category, content, embedding, source_file, created_a
 
 ```
 Node labels:
-- TODO
+:Station (Represents both metro and national rail stations; network type defined by property)
 
 Relationship types:
-- TODO
+:CONNECTED_TO (Bidirectional links representing adjacent stations within the same network)
+
+:INTERCHANGE_TO (Bidirectional links representing transfers between metro and national rail networks)
 
 Key properties:
-- TODO
-```
+:Station -> station_id (str), name (str), network (str: "metro" | "rail"), lines (list)
+
+:CONNECTED_TO -> travel_time_min (int), line (str), network (str: "metro" | "rail")
+
+:INTERCHANGE_TO -> transfer_time_min (int, hardcoded as 5)
 
 ## Function Signatures We Are Implementing
 
