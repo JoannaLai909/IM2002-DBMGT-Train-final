@@ -21,47 +21,32 @@ Functions prefixed with `query_` are called by the agent (skeleton/agent.py).
 """
 
 from __future__ import annotations
-
 from typing import Optional
-
 from neo4j import GraphDatabase
-
 from skeleton.config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 
 
+
+
+
 def _driver():
-    """Return a Neo4j driver. Caller is responsible for closing."""
-    return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    return GraphDatabase.driver(
+        NEO4J_URI,
+        auth=(NEO4J_USER, NEO4J_PASSWORD)
+    )
 
 
-# ── Example ───────────────────────────────────────────────────────────────────
-# The block below shows the query pattern: open a session, run Cypher, return data.
-
-def example_count_nodes() -> int:
-    """Example: count all nodes currently in the graph."""
-    with _driver() as driver:
-        with driver.session() as session:
-            result = session.run("MATCH (n) RETURN count(n) AS total")
-            return result.single()["total"]
-
-# TODO: Implement the query_ functions below.
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-# ── FASTEST ROUTE (Dijkstra by travel_time_min) ───────────────────────────────
-
-def query_shortest_route(
-    origin_id: str,
-    destination_id: str,
-    network: str = "auto",
-) -> dict:
+# ─────────────────────────────
+# FASTEST ROUTE
+# ─────────────────────────────
+def query_shortest_route(origin_id: str, destination_id: str, network: str = "auto") -> dict:
 
     with _driver() as driver:
         with driver.session() as session:
 
             result = session.run("""
-            MATCH (start:Station {station_id: $origin_id})
-            MATCH (end:Station {station_id: $destination_id})
+            MATCH (start:Station {station_id: $origin})
+            MATCH (end:Station {station_id: $destination})
 
             CALL apoc.algo.dijkstra(
                 start,
@@ -77,8 +62,8 @@ def query_shortest_route(
                     name: n.name
                 }] AS path
             """, {
-                "origin_id": origin_id,
-                "destination_id": destination_id
+                "origin": origin_id,
+                "destination": destination_id
             })
 
             record = result.single()
@@ -89,8 +74,7 @@ def query_shortest_route(
                     "origin_id": origin_id,
                     "destination_id": destination_id,
                     "total_time_min": 0,
-                    "path": [],
-                    "legs": []
+                    "path": []
                 }
 
             return {
@@ -98,54 +82,47 @@ def query_shortest_route(
                 "origin_id": origin_id,
                 "destination_id": destination_id,
                 "total_time_min": record["total_time_min"],
-                "path": record["path"],
-                "legs": record["path"]
+                "path": record["path"]
             }
 
 
-# ── CHEAPEST ROUTE (Dijkstra by fare) ────────────────────────────────────────
-
-def query_cheapest_route(
-    origin_id: str,
-    destination_id: str,
-    network: str = "auto",
-    fare_class: str = "standard",
-) -> dict:
-
-    # ⚠️ 不在 graph 做（你的 schema 沒 fare edge）
+# ─────────────────────────────
+# CHEAPEST ROUTE
+# ─────────────────────────────
+def query_cheapest_route(*args, **kwargs):
     return {
         "found": False,
-        "note": "Cheapest route handled in PostgreSQL layer"
+        "note": "Handled in PostgreSQL layer"
     }
 
 
-# ── ALTERNATIVE ROUTES (avoiding a station) ───────────────────────────────────
-
+# ─────────────────────────────
+# ALTERNATIVE ROUTES
+# ─────────────────────────────
 def query_alternative_routes(
     origin_id: str,
     destination_id: str,
     avoid_station_id: str,
-    network: str = "auto",
-    max_routes: int = 3,
+    max_routes: int = 3
 ) -> list[list[dict]]:
 
     with _driver() as driver:
         with driver.session() as session:
 
             result = session.run("""
-            MATCH (start:Station {station_id: $origin_id})
-            MATCH (end:Station {station_id: $destination_id})
+            MATCH (start:Station {station_id: $origin})
+            MATCH (end:Station {station_id: $destination})
 
             MATCH p = allShortestPaths(
-                (start)-[:CONNECTED_TO*..10]->(end)
+                (start)-[:CONNECTED_TO*..8]->(end)
             )
             WHERE NONE(n IN nodes(p) WHERE n.station_id = $avoid)
 
             RETURN p
             LIMIT $limit
             """, {
-                "origin_id": origin_id,
-                "destination_id": destination_id,
+                "origin": origin_id,
+                "destination": destination_id,
                 "avoid": avoid_station_id,
                 "limit": max_routes
             })
@@ -153,78 +130,57 @@ def query_alternative_routes(
             routes = []
 
             for r in result:
-                path = r["p"]
+                p = r["p"]
                 routes.append([
                     {"station_id": n["station_id"], "name": n["name"]}
-                    for n in path.nodes
+                    for n in p.nodes
                 ])
 
             return routes
 
 
-# ── CROSS-NETWORK INTERCHANGE PATH ───────────────────────────────────────────
-
+# ─────────────────────────────
+# INTERCHANGE PATH
+# ─────────────────────────────
 def query_interchange_path(origin_id: str, destination_id: str) -> dict:
 
     with _driver() as driver:
         with driver.session() as session:
 
             result = session.run("""
-            MATCH (start:Station {station_id: $origin_id})
-            MATCH (end:Station {station_id: $destination_id})
+            MATCH (start:Station {station_id: $origin})
+            MATCH (end:Station {station_id: $destination})
 
             MATCH p = shortestPath(
                 (start)-[:CONNECTED_TO|INTERCHANGE_TO*..20]->(end)
             )
 
-            RETURN p, 
-                   reduce(total = 0, r IN relationships(p) | 
-                      total + coalesce(r.travel_time_min, r.transfer_time_min, 0)
-                   ) AS actual_total_time
-
+            RETURN p
             """, {
-                "origin_id": origin_id,
-                "destination_id": destination_id
+                "origin": origin_id,
+                "destination": destination_id
             })
 
             record = result.single()
 
             if not record:
-                return {
-                    "found": False,
-                    "stations": [],
-                    "interchanges": [],
-                    "total_time_min": 0
-                }
+                return {"found": False, "stations": []}
 
             path = record["p"]
-            nodes = list(path.nodes)
-            rels = list(path.relationships)
-
-            stations = [
-                {"station_id": n["station_id"], "name": n["name"]}
-                for n in nodes
-            ]
-
-            interchanges = [
-                {
-                    "from": r.start_node["station_id"],
-                    "to": r.end_node["station_id"]
-                }
-                for r in rels if r.type == "INTERCHANGE_TO"
-            ]
 
             return {
                 "found": True,
-                "stations": stations,
-                "interchanges": interchanges,
-                "total_time_min": record["actual_total_time"] # 修正點：改拿精準加總的時間
+                "stations": [
+                    {"station_id": n["station_id"], "name": n["name"]}
+                    for n in path.nodes
+                ]
             }
 
 
-# ── DELAY RIPPLE ANALYSIS ─────────────────────────────────────────────────────
-
-def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
+# ─────────────────────────────
+# DELAY RIPPLE
+# ─────────────────────────────
+def query_delay_ripple(delayed_station_id: str, hops: int = 2):
 
     with _driver() as driver:
         with driver.session() as session:
@@ -232,7 +188,6 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
             result = session.run("""
             MATCH (s:Station {station_id: $id})
             MATCH path = (s)-[:CONNECTED_TO*1..$hops]-(n)
-
             RETURN DISTINCT n, length(path) AS hops_away
             """, {
                 "id": delayed_station_id,
@@ -247,11 +202,12 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
                 }
                 for r in result
             ]
-        
 
-# ── STATION CONNECTIONS ───────────────────────────────────────────────────────
 
-def query_station_connections(station_id: str) -> list[dict]:
+# ─────────────────────────────
+# STATION CONNECTIONS
+# ─────────────────────────────
+def query_station_connections(station_id: str):
 
     with _driver() as driver:
         with driver.session() as session:
