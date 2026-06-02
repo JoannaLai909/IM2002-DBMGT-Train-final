@@ -37,25 +37,104 @@ def seed():
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
     with driver.session() as session:
 
+        # ─────────────────────────────
+        # CLEAN GRAPH
+        # ─────────────────────────────
         session.run("MATCH (n) DETACH DELETE n")
         print("  Cleared existing graph data")
 
-        # TODO: Design your node labels and create metro station nodes.
-        # Each station has: station_id, name, lines, and interchange info.
-        # See metro_stations.json for the full data structure.
+        # ─────────────────────────────
+        # CREATE METRO STATIONS
+        # ─────────────────────────────
+        for s in metro_stations:
+            session.run("""
+                CREATE (:Station {
+                    station_id: $id,
+                    name: $name,
+                    network: "metro",
+                    lines: $lines
+                })
+            """, {
+                "id": s["station_id"],
+                "name": s["name"],
+                "lines": s.get("lines", [])
+            })
 
-        # TODO: Design your node labels and create national rail station nodes.
-        # See national_rail_stations.json for the full data structure.
+        # ─────────────────────────────
+        # CREATE RAIL STATIONS
+        # ─────────────────────────────
+        for s in rail_stations:
+            session.run("""
+                CREATE (:Station {
+                    station_id: $id,
+                    name: $name,
+                    network: "rail",
+                    lines: $lines
+                })
+            """, {
+                "id": s["station_id"],
+                "name": s["name"],
+                "lines": s.get("lines", [])
+            })
 
-        # TODO: Design your relationship types and create metro links.
-        # Each station lists its adjacent_stations with line and travel_time_min.
-        # Consider what properties to store on the relationship.
+        # ─────────────────────────────
+        # CREATE METRO CONNECTED_TO EDGES
+        # ─────────────────────────────
+        for s in metro_stations:
+            for adj in s.get("adjacent_stations", []):
+                session.run("""
+                    MATCH (a:Station {station_id: $from})
+                    MATCH (b:Station {station_id: $to})
+                    CREATE (a)-[:CONNECTED_TO {
+                        travel_time_min: $time,
+                        line: $line,
+                        network: "metro"
+                    }]->(b)
+                """, {
+                    "from": s["station_id"],
+                    "to": adj["station_id"],
+                    "time": adj["travel_time_min"],
+                    "line": adj.get("line", "")
+                })
 
-        # TODO: Design your relationship types and create national rail links.
+        # ─────────────────────────────
+        # CREATE RAIL CONNECTED_TO EDGES
+        # ─────────────────────────────
+        for s in rail_stations:
+            for adj in s.get("adjacent_stations", []):
+                session.run("""
+                    MATCH (a:Station {station_id: $from})
+                    MATCH (b:Station {station_id: $to})
+                    CREATE (a)-[:CONNECTED_TO {
+                        travel_time_min: $time,
+                        line: $line,
+                        network: "rail"
+                    }]->(b)
+                """, {
+                    "from": s["station_id"],
+                    "to": adj["station_id"],
+                    "time": adj["travel_time_min"],
+                    "line": adj.get("line", "")
+                })
 
-        # TODO: Create interchange relationships between metro and rail stations.
-        # Interchange info is in the is_interchange_national_rail field
-        # of metro_stations.json.
+        # ─────────────────────────────
+        # CREATE INTERCHANGE EDGES
+        # ─────────────────────────────
+        for s in metro_stations:
+            if s.get("is_interchange_national_rail") and s.get("interchange_national_rail_station_id"):
+                session.run("""
+                    MATCH (a:Station {station_id: $metro})
+                    MATCH (b:Station {station_id: $rail})
+                    CREATE (a)-[:INTERCHANGE_TO {
+                        transfer_time_min: 5
+                    }]->(b)
+                    CREATE (b)-[:INTERCHANGE_TO {
+                        transfer_time_min: 5
+                    }]->(a)
+                """, {
+                    "metro": s["station_id"],
+                    "rail": s["interchange_national_rail_station_id"]
+                })
 
     driver.close()
     print("\nNeo4j graph seeded successfully.")
