@@ -95,12 +95,29 @@ policy_documents(id, title, category, content, embedding, source_file, created_a
 
 ```
 Node labels:
-:Station (Represents both metro and national rail stations; network type defined by property)
+:Station
 
-Relationship types:
-:CONNECTED_TO (Bidirectional links representing adjacent stations within the same network)
+Represents both metro and national rail stations.
 
-:INTERCHANGE_TO (Bidirectional links representing transfers between metro and national rail networks)
+Key properties:
+- station_id (str)
+- name (str)
+- network ("metro" | "rail")
+- lines (list)
+
+Relationships:
+
+:CONNECTED_TO
+- Directional adjacency between stations
+- Properties:
+  - travel_time_min (int)
+  - line (str)
+  - network ("metro" | "rail")
+
+:INTERCHANGE_TO
+- Bidirectional transfer between metro and rail stations
+- Properties:
+  - transfer_time_min (int = 5)
 
 Key properties:
 :Station -> station_id (str), name (str), network (str: "metro" | "rail"), lines (list)
@@ -195,6 +212,12 @@ def query_station_connections(station_id: str) -> list[dict]: ...
 - [x] execute_cancellation() uses a transaction and row locking with FOR UPDATE to prevent duplicate cancellation updates.
 
 - [x] query_cheapest_route() is deferred to the PostgreSQL layer because fare pricing metrics reside in relational tables.
+
+- [x] Neo4j Station nodes unify metro + rail into single label (:Station)to simplify routing queries and allow cross-network traversal.
+
+- [x] All shortest path algorithms use travel_time_min as edge weight via APOC Dijkstra (apoc.algo.dijkstra)
+
+- [x] INTERCHANGE_TO edges are bidirectional to ensure shortestPath can traverse metro ↔ rail without direction bias.
 
 ## Prompts That Worked
 
