@@ -34,31 +34,44 @@ def _driver():
 # ─────────────────────────────────────────────
 
 def query_shortest_route(origin_id: str, destination_id: str, network: str = "auto") -> dict:
-
+    """Find the fastest route between two stations using Dijkstra's algorithm."""
+    
     with _driver() as driver:
         with driver.session() as session:
-
-            result = session.run("""
-            MATCH (start:Station {station_id: $origin})
-            MATCH (end:Station {station_id: $destination})
-
-            MATCH p = shortestPath(
-                (start)-[:CONNECTED_TO*..20]->(end)
-            )
-
-            RETURN
-                length(p) AS total_hops,
-                [n IN nodes(p) | {
-                    station_id: n.station_id,
-                    name: n.name
-                }] AS path
-            """, {
+            
+            if network == "auto":
+                cypher = """
+                MATCH (start:Station {station_id: $origin})
+                MATCH (end:Station {station_id: $destination})
+                
+                CALL apoc.algo.dijkstra(
+                    start, end, 'CONNECTED_TO|INTERCHANGE_TO', 'travel_time_min'
+                ) YIELD path, weight
+                
+                RETURN weight AS total_time_min,
+                       [n IN nodes(path) | {station_id: n.station_id, name: n.name}] AS path
+                """
+            else:
+                cypher = """
+                MATCH (start:Station {station_id: $origin, network: $network})
+                MATCH (end:Station {station_id: $destination, network: $network})
+                
+                CALL apoc.algo.dijkstra(
+                    start, end, 'CONNECTED_TO', 'travel_time_min'
+                ) YIELD path, weight
+                
+                RETURN weight AS total_time_min,
+                       [n IN nodes(path) | {station_id: n.station_id, name: n.name}] AS path
+                """
+            
+            result = session.run(cypher, {
                 "origin": origin_id,
-                "destination": destination_id
+                "destination": destination_id,
+                "network": network
             })
-
+            
             record = result.single()
-
+            
             if not record:
                 return {
                     "found": False,
@@ -67,7 +80,7 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
                     "total_hops": 0,
                     "path": []
                 }
-
+            
             return {
                 "found": True,
                 "origin_id": origin_id,
@@ -77,10 +90,9 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
             }
 
 
-# ─────────────────────────────────────────────
-# CHEAPEST ROUTE (stub)
-# ─────────────────────────────────────────────
-
+# ─────────────────────────────
+# CHEAPEST ROUTE
+# ─────────────────────────────
 def query_cheapest_route(origin_id: str, destination_id: str, network: str = "auto", fare_class: str = "standard") -> dict:
     return {
         "found": False,
@@ -90,25 +102,41 @@ def query_cheapest_route(origin_id: str, destination_id: str, network: str = "au
 
 # ─────────────────────────────────────────────
 # ALTERNATIVE ROUTES
-# ─────────────────────────────────────────────
-
-def query_alternative_routes(origin_id: str, destination_id: str, avoid_station_id: str, network="auto", max_routes=3):
-
+# ─────────────────────────────
+def query_alternative_routes(origin_id: str, destination_id: str, avoid_station_id: str, network: str = "auto", max_routes: int = 3) -> list[list[dict]]:
+    """Find alternative routes avoiding a specific station."""
+    
     with _driver() as driver:
         with driver.session() as session:
-
-            result = session.run("""
-            MATCH (start:Station {station_id: $origin})
-            MATCH (end:Station {station_id: $destination})
-
-            MATCH p = allShortestPaths(
-                (start)-[:CONNECTED_TO*..8]->(end)
-            )
-            WHERE NONE(n IN nodes(p) WHERE n.station_id = $avoid)
-
-            RETURN p
-            LIMIT $limit
-            """, {
+            
+            if network == "auto":
+                cypher = """
+                MATCH (start:Station {station_id: $origin})
+                MATCH (end:Station {station_id: $destination})
+                
+                MATCH p = allShortestPaths(
+                    (start)-[:CONNECTED_TO|INTERCHANGE_TO*..15]->(end)
+                )
+                WHERE NONE(n IN nodes(p) WHERE n.station_id = $avoid)
+                
+                RETURN p
+                LIMIT $limit
+                """
+            else:
+                cypher = f"""
+                MATCH (start:Station {{station_id: $origin, network: '{network}'}})
+                MATCH (end:Station {{station_id: $destination, network: '{network}'}})
+                
+                MATCH p = allShortestPaths(
+                    (start)-[:CONNECTED_TO*..15]->(end)
+                )
+                WHERE NONE(n IN nodes(p) WHERE n.station_id = $avoid)
+                
+                RETURN p
+                LIMIT $limit
+                """
+            
+            result = session.run(cypher, {
                 "origin": origin_id,
                 "destination": destination_id,
                 "avoid": avoid_station_id,
@@ -116,9 +144,8 @@ def query_alternative_routes(origin_id: str, destination_id: str, avoid_station_
             })
 
             routes = []
-
-            for r in result:
-                p = r["p"]
+            for record in result:
+                p = record["p"]
                 routes.append([
                     {"station_id": n["station_id"], "name": n["name"]}
                     for n in p.nodes
@@ -132,7 +159,8 @@ def query_alternative_routes(origin_id: str, destination_id: str, avoid_station_
 # ─────────────────────────────────────────────
 
 def query_interchange_path(origin_id: str, destination_id: str) -> dict:
-
+    """Find a path between two stations that may span both metro and rail networks."""
+    
     with _driver() as driver:
         with driver.session() as session:
 
@@ -168,53 +196,79 @@ def query_interchange_path(origin_id: str, destination_id: str) -> dict:
 
 # ─────────────────────────────────────────────
 # DELAY RIPPLE
-# ─────────────────────────────────────────────
+# ─────────────────────────────
+def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
+    """Find all stations affected by a delay within N hops."""
 
-def query_delay_ripple(delayed_station_id: str, hops: int = 2):
+    hops = max(1, min(hops, 10))
+
+    cypher = f"""
+    MATCH (s:Station {{station_id: $id}})
+    MATCH p = (s)-[:CONNECTED_TO*1..{hops}]-(n)
+
+    WHERE n.station_id <> s.station_id
+      AND n.network = s.network
+
+    RETURN DISTINCT
+           n.station_id AS station_id,
+           n.name AS name,
+           min(length(p)) AS hops_away
+
+    ORDER BY hops_away, name
+    """
+
+    with _driver() as driver:
+        with driver.session() as session:
+
+            result = session.run(
+                cypher,
+                {"id": delayed_station_id}
+            )
+
+            return [
+                {
+                    "station_id": record["station_id"],
+                    "name": record["name"],
+                    "hops_away": record["hops_away"]
+                }
+                for record in result
+            ]
+
+
+# ─────────────────────────────────────────────
+# STATION CONNECTIONS
+# ─────────────────────────────
+def query_station_connections(station_id: str) -> list[dict]:
+    """Get all directly connected stations from a given station."""
 
     with _driver() as driver:
         with driver.session() as session:
 
             result = session.run("""
             MATCH (s:Station {station_id: $id})
-            MATCH path = (s)-[:CONNECTED_TO*1..$hops]-(n)
+                  -[r:CONNECTED_TO|INTERCHANGE_TO]->
+                  (n)
 
-            RETURN DISTINCT n, length(path) AS hops_away
-            """, {
-                "id": delayed_station_id,
-                "hops": hops
-            })
+            RETURN
+                n.station_id AS station_id,
+                n.name AS name,
+                type(r) AS connection_type,
+                coalesce(
+                    r.travel_time_min,
+                    r.transfer_time_min
+                ) AS travel_time_min
 
-            return [
-                {
-                    "station_id": r["n"]["station_id"],
-                    "name": r["n"]["name"],
-                    "hops_away": r["hops_away"]
-                }
-                for r in result
-            ]
-
-
-# ─────────────────────────────────────────────
-# STATION CONNECTIONS
-# ─────────────────────────────────────────────
-
-def query_station_connections(station_id: str):
-
-    with _driver() as driver:
-        with driver.session() as session:
-
-            result = session.run("""
-            MATCH (s:Station {station_id: $id})-[:CONNECTED_TO]->(n)
-            RETURN n
+            ORDER BY name
             """, {
                 "id": station_id
             })
 
             return [
                 {
-                    "station_id": r["n"]["station_id"],
-                    "name": r["n"]["name"]
+                    "station_id": record["station_id"],
+                    "name": record["name"],
+                    "connection_type": record["connection_type"],
+                    "travel_time_min": record["travel_time_min"]
                 }
-                for r in result
+                for record in result
             ]

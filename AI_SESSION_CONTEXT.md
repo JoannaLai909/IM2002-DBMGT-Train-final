@@ -88,16 +88,8 @@ policy_documents(id, title, category, content, embedding, source_file, created_a
 
 ## Agreed Graph Schema
 
-<!-- ============================================================
-  FILL THIS IN after your team agrees on Neo4j node labels and
-  relationship types.
-  ============================================================ -->
-
-```
 Node labels:
 :Station
-
-Represents both metro and national rail stations.
 
 Key properties:
 - station_id (str)
@@ -113,18 +105,16 @@ Relationships:
   - travel_time_min (int)
   - line (str)
   - network ("metro" | "rail")
+  - from_id (str) — for MERGE uniqueness
+  - to_id (str) — for MERGE uniqueness
 
 :INTERCHANGE_TO
 - Bidirectional transfer between metro and rail stations
 - Properties:
-  - transfer_time_min (int = 5)
-
-Key properties:
-:Station -> station_id (str), name (str), network (str: "metro" | "rail"), lines (list)
-
-:CONNECTED_TO -> travel_time_min (int), line (str), network (str: "metro" | "rail")
-
-:INTERCHANGE_TO -> transfer_time_min (int, hardcoded as 5)
+  - transfer_time_min (int = 5) — used for Dijkstra pathfinding
+  - travel_time_min (int = 5) — actual transfer time
+  - from_id (str) — for MERGE uniqueness
+  - to_id (str) — for MERGE uniqueness
 
 ## Function Signatures We Are Implementing
 
@@ -212,12 +202,25 @@ def query_station_connections(station_id: str) -> list[dict]: ...
 - [x] execute_cancellation() uses a transaction and row locking with FOR UPDATE to prevent duplicate cancellation updates.
 
 - [x] query_cheapest_route() is deferred to the PostgreSQL layer because fare pricing metrics reside in relational tables.
+- [x] Neo4j Station nodes unify metro + rail into single label (:Station) 
+  to simplify routing queries and allow cross-network traversal.
 
-- [x] Neo4j Station nodes unify metro + rail into single label (:Station)to simplify routing queries and allow cross-network traversal.
-
-- [x] All shortest path algorithms use travel_time_min as edge weight via APOC Dijkstra (apoc.algo.dijkstra)
+- [x] All shortest path algorithms use travel_time_min as edge weight via APOC Dijkstra (apoc.algo.dijkstra).
 
 - [x] INTERCHANGE_TO edges are bidirectional to ensure shortestPath can traverse metro ↔ rail without direction bias.
+
+- [x] query_shortest_route() and query_alternative_routes() support three network modes:
+  "auto" (cross-network via INTERCHANGE_TO), "metro" (metro-only), "rail" (rail-only).
+  Network filtering is applied in WHERE clause via Station.network attribute.
+
+- [x] Neo4j seed uses MERGE instead of CREATE for idempotency
+  (seed_neo4j.py can be safely re-run without creating duplicate nodes/edges).
+
+- [x] CONNECTED_TO and INTERCHANGE_TO edges include from_id and to_id properties
+  to ensure unique identification during MERGE operations.
+
+- [x] query_delay_ripple() uses undirected relationship matching -(n)-
+  to model realistic delay propagation (bidirectional network effect).
 
 ## Prompts That Worked
 

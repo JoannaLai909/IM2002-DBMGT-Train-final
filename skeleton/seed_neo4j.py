@@ -37,59 +37,47 @@ def seed():
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
     with driver.session() as session:
 
-        # ─────────────────────────────
-        # CLEAN GRAPH
-        # ─────────────────────────────
         session.run("MATCH (n) DETACH DELETE n")
         print("  Cleared existing graph data")
 
-        # ─────────────────────────────
-        # CREATE METRO STATIONS
-        # ─────────────────────────────
+        # Create metro station nodes
         for s in metro_stations:
             session.run("""
-                CREATE (:Station {
-                    station_id: $id,
-                    name: $name,
-                    network: "metro",
-                    lines: $lines
-                })
+                MERGE (station:Station {station_id: $id})
+                SET station.name = $name,
+                    station.network = 'metro',
+                    station.lines = $lines
             """, {
                 "id": s["station_id"],
                 "name": s["name"],
                 "lines": s.get("lines", [])
             })
+        print(f"  Created {len(metro_stations)} metro stations")
 
-        # ─────────────────────────────
-        # CREATE RAIL STATIONS
-        # ─────────────────────────────
+        # Create national rail station nodes
         for s in rail_stations:
             session.run("""
-                CREATE (:Station {
-                    station_id: $id,
-                    name: $name,
-                    network: "rail",
-                    lines: $lines
-                })
+                MERGE (station:Station {station_id: $id})
+                SET station.name = $name,
+                    station.network = 'rail',
+                    station.lines = $lines
             """, {
                 "id": s["station_id"],
                 "name": s["name"],
                 "lines": s.get("lines", [])
             })
+        print(f"  Created {len(rail_stations)} rail stations")
 
-        # ─────────────────────────────
-        # CREATE METRO CONNECTED_TO EDGES
-        # ─────────────────────────────
+        # Create metro links
         for s in metro_stations:
             for adj in s.get("adjacent_stations", []):
                 session.run("""
                     MATCH (a:Station {station_id: $from})
                     MATCH (b:Station {station_id: $to})
-                    CREATE (a)-[:CONNECTED_TO {
-                        travel_time_min: $time,
-                        line: $line,
-                        network: "metro"
-                    }]->(b)
+                    MERGE (a)-[r:CONNECTED_TO {from_id: $from, to_id: $to}]->(b)
+                    SET r.travel_time_min = $time,
+                        r.line = $line,
+                        r.network = 'metro'
                 """, {
                     "from": s["station_id"],
                     "to": adj["station_id"],
@@ -97,19 +85,16 @@ def seed():
                     "line": adj.get("line", "")
                 })
 
-        # ─────────────────────────────
-        # CREATE RAIL CONNECTED_TO EDGES
-        # ─────────────────────────────
+        # Create national rail links
         for s in rail_stations:
             for adj in s.get("adjacent_stations", []):
                 session.run("""
                     MATCH (a:Station {station_id: $from})
                     MATCH (b:Station {station_id: $to})
-                    CREATE (a)-[:CONNECTED_TO {
-                        travel_time_min: $time,
-                        line: $line,
-                        network: "rail"
-                    }]->(b)
+                    MERGE (a)-[r:CONNECTED_TO {from_id: $from, to_id: $to}]->(b)
+                    SET r.travel_time_min = $time,
+                        r.line = $line,
+                        r.network = 'rail'
                 """, {
                     "from": s["station_id"],
                     "to": adj["station_id"],
@@ -117,23 +102,32 @@ def seed():
                     "line": adj.get("line", "")
                 })
 
-        # ─────────────────────────────
-        # CREATE INTERCHANGE EDGES
-        # ─────────────────────────────
+        # Create interchange relationships
         for s in metro_stations:
             if s.get("is_interchange_national_rail") and s.get("interchange_national_rail_station_id"):
+                metro_id = s["station_id"]
+                rail_id = s["interchange_national_rail_station_id"]
+                
                 session.run("""
                     MATCH (a:Station {station_id: $metro})
                     MATCH (b:Station {station_id: $rail})
-                    CREATE (a)-[:INTERCHANGE_TO {
-                        transfer_time_min: 5
-                    }]->(b)
-                    CREATE (b)-[:INTERCHANGE_TO {
-                        transfer_time_min: 5
-                    }]->(a)
+                    MERGE (a)-[r1:INTERCHANGE_TO {from_id: $metro, to_id: $rail}]->(b)
+                    SET r1.transfer_time_min = 5,
+                        r1.travel_time_min = 5
                 """, {
-                    "metro": s["station_id"],
-                    "rail": s["interchange_national_rail_station_id"]
+                    "metro": metro_id,
+                    "rail": rail_id
+                })
+                
+                session.run("""
+                    MATCH (a:Station {station_id: $rail})
+                    MATCH (b:Station {station_id: $metro})
+                    MERGE (a)-[r2:INTERCHANGE_TO {from_id: $rail, to_id: $metro}]->(b)
+                    SET r2.transfer_time_min = 5,
+                        r2.travel_time_min = 5
+                """, {
+                    "rail": rail_id,
+                    "metro": metro_id
                 })
 
     driver.close()
