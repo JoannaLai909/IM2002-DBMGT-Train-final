@@ -36,10 +36,7 @@
 
 ### A1. What did you personally implement?
 
-List the specific tasks, functions, files, or document sections that you were the primary author of.
-Be specific (e.g., "I designed all 12 tables in schema.sql and implemented query_national_rail_availability and execute_booking").
-
-> *Your answer:*
+> 
 I led the PostgreSQL schema design, including relational table design, JSONB modelling, ER diagram design, and PostgreSQL seeding implementation. I was responsible for transforming the provided mock JSON datasets into a normalized relational schema, implementing the PostgreSQL seeding workflow (seed_postgres.py), validating seeded data, and documenting the database design. I also contributed to seat layout modelling, database testing, and project documentation.
 
 
@@ -47,9 +44,7 @@ I led the PostgreSQL schema design, including relational table design, JSONB mod
 
 ### A2. What challenges did you face?
 
-Describe any technical or collaboration difficulties you personally encountered and how you resolved them.
-
-> *Your answer:*
+> 
 One of the main challenges was designing a database schema that could support both metro and national rail systems while remaining normalized and easy to query. Another challenge was understanding how to represent seat layout data stored in JSON format and deciding how much information should be stored in relational tables versus JSON structures.
 
 During integration testing, we also encountered issues related to Docker configuration, PostgreSQL seeding, Neo4j routing queries, and Ollama model setup. We resolved these issues through incremental testing, reviewing query outputs in pgAdmin, and validating system behavior using the provided TransitFlow interface.
@@ -95,14 +90,14 @@ If your team has 2 members, complete B1 only. If 3 members, complete B1 and B2.
 List the tasks, functions, files, or document sections that this teammate was the primary author of,
 based on what you observed during the project (compare against the work allocation).
 
-> *Your answer:*
+> 
 This teammate was primarily responsible for the Neo4j graph database component. They designed the graph schema, implemented graph seeding, developed route-finding queries, and integrated the graph database with the TransitFlow system. They also contributed to graph-related documentation and testing.
 
 ---
 
 #### Did their actual contribution match the agreed work allocation?
 
-> *Your answer (Yes / Mostly / Partially / No — with explanation):*
+> 
 Yes. The teammate completed the graph database tasks that were assigned in the work allocation and actively participated in integration testing.
 
 ---
@@ -132,14 +127,14 @@ Yes. The teammate completed the graph database tasks that were assigned in the w
 
 #### What did this teammate deliver?
 
-> *Your answer:*
+> 
 his teammate was primarily responsible for implementing relational database query functions, booking operations, authentication functionality, and application-level integration. Their work included availability queries, fare queries, booking logic, user-related functions, and AI workflow integration.
 
 ---
 
 #### Did their actual contribution match the agreed work allocation?
 
-> *Your answer (Yes / Mostly / Partially / No — with explanation):*
+> 
 Yes. The teammate completed the assigned implementation tasks and contributed to testing and debugging during integration.
 
 ---
@@ -177,14 +172,14 @@ All members (including yourself) must sum to 100%.
 
 ### D1. What went well in the team's collaboration?
 
-> *Your answer (2–4 sentences):*
+> 
 Our team divided the project into relational database, graph database, and application/query development tasks. This allowed each member to focus on a specific area while maintaining clear responsibilities. Throughout the project, team members regularly shared progress updates and assisted each other during integration and testing, which helped us identify and resolve issues efficiently.
 
 ---
 
 ### D2. What would you do differently if you did this project again?
 
-> *Your answer (2–4 sentences):*
+> 
 If we were to do this project again, we would begin system integration and end-to-end testing earlier in the development process. While individual components worked well independently, several issues only became visible when integrating PostgreSQL, Neo4j, vector search, and the user interface. Earlier integration testing would help reduce debugging time and improve overall development efficiency.
 
 ---
@@ -194,7 +189,7 @@ If we were to do this project again, we would begin system integration and end-t
 This is optional. Use it only if there is important context that the ratings above do not capture
 (e.g., a member had a documented personal emergency, or a member was unresponsive for a significant period).
 
-> *Your answer (or "Nothing to add"):*
+> 
 
 Nothing to add.
 
@@ -205,4 +200,4 @@ Nothing to add.
 I confirm that this peer review reflects my honest and independent assessment.
 I understand it will be kept confidential from my teammates.
 
-**Signed:** _________________________________ **Date:** _______________
+**Signed:** ______賴柔羽___________________________ **Date:** ______6/11_________
