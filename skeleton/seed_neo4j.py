@@ -45,7 +45,7 @@ def seed():
 
         # Clear existing graph data before seeding
         session.run("MATCH (n) DETACH DELETE n")
-        print("  Cleared existing graph data")
+        print("   Cleared existing graph data")
 
         # ─────────────────────────────────────────────
         # CREATE METRO STATION NODES
@@ -56,14 +56,16 @@ def seed():
                 MERGE (station:Metro {station_id: $id})
                 SET station.name = $name,
                     station.network = 'metro',
-                    station.lines = $lines
+                    station.lines = $lines,
+                    station.line_id = $primary_line
             """, {
                 "id": s["station_id"],
                 "name": s["name"],
-                "lines": s.get("lines", [])
+                "lines": s.get("lines", []),
+                "primary_line": s.get("lines", [""])[0] if s.get("lines") else ""
             })
 
-        print(f"  Created {len(metro_stations)} metro stations (with :Metro label)")
+        print(f"   Created {len(metro_stations)} metro stations (with :Metro label)")
 
         # ─────────────────────────────────────────────
         # CREATE NATIONAL RAIL STATION NODES
@@ -74,14 +76,16 @@ def seed():
                 MERGE (station:Rail {station_id: $id})
                 SET station.name = $name,
                     station.network = 'rail',
-                    station.lines = $lines
+                    station.lines = $lines,
+                    station.line_id = $primary_line
             """, {
                 "id": s["station_id"],
                 "name": s["name"],
-                "lines": s.get("lines", [])
+                "lines": s.get("lines", []),
+                "primary_line": s.get("lines", [""])[0] if s.get("lines") else ""
             })
 
-        print(f"  Created {len(rail_stations)} rail stations (with :Rail label)")
+        print(f"   Created {len(rail_stations)} rail stations (with :Rail label)")
 
         # ─────────────────────────────────────────────
         # CREATE METRO CONNECTIONS (CONNECTED_TO relationships)
@@ -98,7 +102,7 @@ def seed():
                     MERGE (a)-[r:CONNECTED_TO {from_id: $from, to_id: $to}]->(b)
 
                     SET r.travel_time_min = $time,
-                        r.line = $line,
+                        r.line_id = $line,
                         r.network = 'metro'
                 """, {
                     "from": s["station_id"],
@@ -122,7 +126,7 @@ def seed():
                     MERGE (a)-[r:CONNECTED_TO {from_id: $from, to_id: $to}]->(b)
 
                     SET r.travel_time_min = $time,
-                        r.line = $line,
+                        r.line_id = $line,
                         r.network = 'rail'
                 """, {
                     "from": s["station_id"],

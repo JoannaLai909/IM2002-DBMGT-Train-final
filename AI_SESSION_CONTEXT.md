@@ -96,7 +96,7 @@ Key properties:
 - station_id (str)
 - name (str)
 - network ("metro" | "rail")
-- lines (list)
+- line_id (str) 
 
 Relationships:
 
@@ -104,7 +104,7 @@ Relationships:
 - Directional adjacency between stations
 - Properties:
   - travel_time_min (int)
-  - line (str)
+  - line_id (str)  
   - network ("metro" | "rail")
   - from_id (str) — for MERGE uniqueness
   - to_id (str) — for MERGE uniqueness
@@ -112,8 +112,7 @@ Relationships:
 :INTERCHANGE_TO
 - Bidirectional transfer between metro and rail stations
 - Properties:
-  - transfer_time_min (int = 5) — used for Dijkstra pathfinding
-  - travel_time_min (int = 5) — actual transfer time
+  - transfer_time_min (int = 5) 
   - from_id (str) — for MERGE uniqueness
   - to_id (str) — for MERGE uniqueness
 
@@ -201,8 +200,6 @@ def query_station_connections(station_id: str) -> list[dict]: ...
 
 - [x] execute_cancellation() uses a transaction and row locking with FOR UPDATE to prevent duplicate cancellation updates.
 
-- [x] query_cheapest_route() is deferred to the PostgreSQL layer because fare pricing metrics reside in relational tables.
-
 - [x] Neo4j Station nodes use separated labels (:Metro and :Rail) instead of a unified :Station label 
   to ensure clean native database styling and intuitive color differentiation.
 
@@ -213,7 +210,7 @@ def query_station_connections(station_id: str) -> list[dict]: ...
 - [x] query_shortest_route() and query_alternative_routes() support three network modes:
   "auto" (cross-network via INTERCHANGE_TO), "metro" (metro-only), "rail" (rail-only).
   Network filtering is applied directly using node labels (:Metro or :Rail) instead of WHERE clause attribute filtering.
-  
+
 - [x] Neo4j seed uses MERGE instead of CREATE for idempotency
   (seed_neo4j.py can be safely re-run without creating duplicate nodes/edges).
 
