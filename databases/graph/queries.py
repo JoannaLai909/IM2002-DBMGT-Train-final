@@ -19,12 +19,13 @@ then implement the query_ functions below.
 
 Functions prefixed with `query_` are called by the agent (skeleton/agent.py).
 """
-
 from __future__ import annotations
 from typing import Optional
 from neo4j import GraphDatabase
 from skeleton.config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 
+
+# Create Neo4j driver connection
 def _driver():
     return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
@@ -39,11 +40,13 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
     with _driver() as driver:
         with driver.session() as session:
             
+            # If network is auto, allow cross-network routing (metro + rail)
             if network == "auto":
                 cypher = """
-                MATCH (start:Station {station_id: $origin})
-                MATCH (end:Station {station_id: $destination})
+                MATCH (start {station_id: $origin})
+                MATCH (end {station_id: $destination})
                 
+                // Run APOC Dijkstra using travel_time_min as weight
                 CALL apoc.algo.dijkstra(
                     start, end, 'CONNECTED_TO|INTERCHANGE_TO', 'travel_time_min'
                 ) YIELD path, weight
@@ -52,18 +55,21 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
                        [n IN nodes(path) | {station_id: n.station_id, name: n.name}] AS path
                 """
             else:
-                cypher = """
-                MATCH (start:Station {station_id: $origin, network: $network})
-                MATCH (end:Station {station_id: $destination, network: $network})
+                # Dynamically match specific network label (:Metro or :Rail) for optimized lookup
+                label = "Metro" if network == "metro" else "Rail"
+                cypher = f"""
+                MATCH (start:{label} {{station_id: $origin}})
+                MATCH (end:{label} {{station_id: $destination}})
                 
                 CALL apoc.algo.dijkstra(
                     start, end, 'CONNECTED_TO', 'travel_time_min'
                 ) YIELD path, weight
                 
                 RETURN weight AS total_time_min,
-                       [n IN nodes(path) | {station_id: n.station_id, name: n.name}] AS path
+                       [n IN nodes(path) | {{station_id: n.station_id, name: n.name}}] AS path
                 """
             
+            # Execute Cypher query
             result = session.run(cypher, {
                 "origin": origin_id,
                 "destination": destination_id,
@@ -72,6 +78,7 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
             
             record = result.single()
             
+            # If no route found
             if not record:
                 return {
                     "found": False,
@@ -85,7 +92,8 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
                 "found": True,
                 "origin_id": origin_id,
                 "destination_id": destination_id,
-                "total_hops": record["total_hops"],
+                "total_time_min": record["total_time_min"],
+                "total_hops": len(record["path"]),
                 "path": record["path"]
             }
 
@@ -93,7 +101,9 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
 # ─────────────────────────────
 # CHEAPEST ROUTE
 # ─────────────────────────────
+
 def query_cheapest_route(origin_id: str, destination_id: str, network: str = "auto", fare_class: str = "standard") -> dict:
+    # Not implemented yet (requires pricing model or GDS)
     return {
         "found": False,
         "note": "Cheapest route not implemented (requires GDS or pricing model)"
@@ -102,7 +112,8 @@ def query_cheapest_route(origin_id: str, destination_id: str, network: str = "au
 
 # ─────────────────────────────────────────────
 # ALTERNATIVE ROUTES
-# ─────────────────────────────
+# ─────────────────────────────────────────────
+
 def query_alternative_routes(origin_id: str, destination_id: str, avoid_station_id: str, network: str = "auto", max_routes: int = 3) -> list[list[dict]]:
     """Find alternative routes avoiding a specific station."""
     
@@ -111,25 +122,30 @@ def query_alternative_routes(origin_id: str, destination_id: str, avoid_station_
             
             if network == "auto":
                 cypher = """
-                MATCH (start:Station {station_id: $origin})
-                MATCH (end:Station {station_id: $destination})
+                MATCH (start {station_id: $origin})
+                MATCH (end {station_id: $destination})
                 
+                // Find all shortest paths between two stations
                 MATCH p = allShortestPaths(
                     (start)-[:CONNECTED_TO|INTERCHANGE_TO*..15]->(end)
                 )
+                
+                // Exclude paths that contain avoided station
                 WHERE NONE(n IN nodes(p) WHERE n.station_id = $avoid)
                 
                 RETURN p
                 LIMIT $limit
                 """
             else:
+                label = "Metro" if network == "metro" else "Rail"
                 cypher = f"""
-                MATCH (start:Station {{station_id: $origin, network: '{network}'}})
-                MATCH (end:Station {{station_id: $destination, network: '{network}'}})
+                MATCH (start:{label} {{station_id: $origin}})
+                MATCH (end:{label} {{station_id: $destination}})
                 
                 MATCH p = allShortestPaths(
                     (start)-[:CONNECTED_TO*..15]->(end)
                 )
+                
                 WHERE NONE(n IN nodes(p) WHERE n.station_id = $avoid)
                 
                 RETURN p
@@ -144,6 +160,8 @@ def query_alternative_routes(origin_id: str, destination_id: str, avoid_station_
             })
 
             routes = []
+            
+            # Convert Neo4j path objects into Python dictionaries
             for record in result:
                 p = record["p"]
                 routes.append([
@@ -159,15 +177,16 @@ def query_alternative_routes(origin_id: str, destination_id: str, avoid_station_
 # ─────────────────────────────────────────────
 
 def query_interchange_path(origin_id: str, destination_id: str) -> dict:
-    """Find a path between two stations that may span both metro and rail networks."""
+    """Find a path that may span both metro and rail networks."""
     
     with _driver() as driver:
         with driver.session() as session:
 
             result = session.run("""
-            MATCH (start:Station {station_id: $origin})
-            MATCH (end:Station {station_id: $destination})
+            MATCH (start {station_id: $origin})
+            MATCH (end {station_id: $destination})
 
+            // Find shortest path including transfer edges
             MATCH p = shortestPath(
                 (start)-[:CONNECTED_TO|INTERCHANGE_TO*..20]->(end)
             )
@@ -196,18 +215,22 @@ def query_interchange_path(origin_id: str, destination_id: str) -> dict:
 
 # ─────────────────────────────────────────────
 # DELAY RIPPLE
-# ─────────────────────────────
+# ─────────────────────────────────────────────
+
 def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
     """Find all stations affected by a delay within N hops."""
 
+    # Clamp hops to avoid excessive graph traversal
     hops = max(1, min(hops, 10))
 
+    # Match regardless of label to identify the source station node
     cypher = f"""
-    MATCH (s:Station {{station_id: $id}})
+    MATCH (s {{station_id: $id}})
+    
+    // Traverse up to N hops from delayed station
     MATCH p = (s)-[:CONNECTED_TO*1..{hops}]-(n)
 
     WHERE n.station_id <> s.station_id
-      AND n.network = s.network
 
     RETURN DISTINCT
            n.station_id AS station_id,
@@ -237,7 +260,8 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
 
 # ─────────────────────────────────────────────
 # STATION CONNECTIONS
-# ─────────────────────────────
+# ─────────────────────────────────────────────
+
 def query_station_connections(station_id: str) -> list[dict]:
     """Get all directly connected stations from a given station."""
 
@@ -245,7 +269,7 @@ def query_station_connections(station_id: str) -> list[dict]:
         with driver.session() as session:
 
             result = session.run("""
-            MATCH (s:Station {station_id: $id})
+            MATCH (s {station_id: $id})
                   -[r:CONNECTED_TO|INTERCHANGE_TO]->
                   (n)
 

@@ -10,40 +10,50 @@ Loads station and network data from train-mock-data/:
 Design your graph schema (node labels, relationship types, properties)
 based on the data in these files, then implement the seed() function below.
 """
-
 import json
 import os
 import sys
 
+# Ensure project root is in Python path so we can import skeleton modules
 sys.path.insert(0, ".")
 
 from neo4j import GraphDatabase
 from skeleton.config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 
+
+# Path to mock data folder (relative to this file)
 _DATA_DIR = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "train-mock-data")
 )
 
 
 def _load(filename):
+    # Load JSON file from train-mock-data directory
     with open(os.path.join(_DATA_DIR, filename), encoding="utf-8") as f:
         return json.load(f)
 
 
 def seed():
+    # Load station datasets (metro + national rail)
     metro_stations = _load("metro_stations.json")
     rail_stations  = _load("national_rail_stations.json")
 
+    # Connect to Neo4j database
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+
     with driver.session() as session:
 
+        # Clear existing graph data before seeding
         session.run("MATCH (n) DETACH DELETE n")
         print("  Cleared existing graph data")
 
-        # Create metro station nodes
+        # ─────────────────────────────────────────────
+        # CREATE METRO STATION NODES
+        # ─────────────────────────────────────────────
+
         for s in metro_stations:
             session.run("""
-                MERGE (station:Station {station_id: $id})
+                MERGE (station:Metro {station_id: $id})
                 SET station.name = $name,
                     station.network = 'metro',
                     station.lines = $lines
@@ -52,12 +62,16 @@ def seed():
                 "name": s["name"],
                 "lines": s.get("lines", [])
             })
-        print(f"  Created {len(metro_stations)} metro stations")
 
-        # Create national rail station nodes
+        print(f"  Created {len(metro_stations)} metro stations (with :Metro label)")
+
+        # ─────────────────────────────────────────────
+        # CREATE NATIONAL RAIL STATION NODES
+        # ─────────────────────────────────────────────
+
         for s in rail_stations:
             session.run("""
-                MERGE (station:Station {station_id: $id})
+                MERGE (station:Rail {station_id: $id})
                 SET station.name = $name,
                     station.network = 'rail',
                     station.lines = $lines
@@ -66,15 +80,23 @@ def seed():
                 "name": s["name"],
                 "lines": s.get("lines", [])
             })
-        print(f"  Created {len(rail_stations)} rail stations")
 
-        # Create metro links
+        print(f"  Created {len(rail_stations)} rail stations (with :Rail label)")
+
+        # ─────────────────────────────────────────────
+        # CREATE METRO CONNECTIONS (CONNECTED_TO relationships)
+        # ─────────────────────────────────────────────
+
         for s in metro_stations:
             for adj in s.get("adjacent_stations", []):
+
                 session.run("""
-                    MATCH (a:Station {station_id: $from})
-                    MATCH (b:Station {station_id: $to})
+                    MATCH (a:Metro {station_id: $from})
+                    MATCH (b:Metro {station_id: $to})
+
+                    // Create directed relationship between metro stations
                     MERGE (a)-[r:CONNECTED_TO {from_id: $from, to_id: $to}]->(b)
+
                     SET r.travel_time_min = $time,
                         r.line = $line,
                         r.network = 'metro'
@@ -85,13 +107,20 @@ def seed():
                     "line": adj.get("line", "")
                 })
 
-        # Create national rail links
+        # ─────────────────────────────────────────────
+        # CREATE NATIONAL RAIL CONNECTIONS
+        # ─────────────────────────────────────────────
+
         for s in rail_stations:
             for adj in s.get("adjacent_stations", []):
+
                 session.run("""
-                    MATCH (a:Station {station_id: $from})
-                    MATCH (b:Station {station_id: $to})
+                    MATCH (a:Rail {station_id: $from})
+                    MATCH (b:Rail {station_id: $to})
+
+                    // Create directed relationship between rail stations
                     MERGE (a)-[r:CONNECTED_TO {from_id: $from, to_id: $to}]->(b)
+
                     SET r.travel_time_min = $time,
                         r.line = $line,
                         r.network = 'rail'
@@ -102,27 +131,40 @@ def seed():
                     "line": adj.get("line", "")
                 })
 
-        # Create interchange relationships
+        # ─────────────────────────────────────────────
+        # CREATE INTERCHANGE CONNECTIONS (metro ↔ rail)
+        # ─────────────────────────────────────────────
+
         for s in metro_stations:
+
+            # Only create interchange if station has a rail connection
             if s.get("is_interchange_national_rail") and s.get("interchange_national_rail_station_id"):
+
                 metro_id = s["station_id"]
                 rail_id = s["interchange_national_rail_station_id"]
-                
+
+                # Metro → Rail transfer edge
                 session.run("""
-                    MATCH (a:Station {station_id: $metro})
-                    MATCH (b:Station {station_id: $rail})
+                    MATCH (a:Metro {station_id: $metro})
+                    MATCH (b:Rail {station_id: $rail})
+
                     MERGE (a)-[r1:INTERCHANGE_TO {from_id: $metro, to_id: $rail}]->(b)
+
+                    // Fixed transfer time (assumption: 5 minutes)
                     SET r1.transfer_time_min = 5,
                         r1.travel_time_min = 5
                 """, {
                     "metro": metro_id,
                     "rail": rail_id
                 })
-                
+
+                # Rail → Metro transfer edge (bidirectional interchange)
                 session.run("""
-                    MATCH (a:Station {station_id: $rail})
-                    MATCH (b:Station {station_id: $metro})
+                    MATCH (a:Rail {station_id: $rail})
+                    MATCH (b:Metro {station_id: $metro})
+
                     MERGE (a)-[r2:INTERCHANGE_TO {from_id: $rail, to_id: $metro}]->(b)
+
                     SET r2.transfer_time_min = 5,
                         r2.travel_time_min = 5
                 """, {
@@ -130,7 +172,9 @@ def seed():
                     "metro": metro_id
                 })
 
+    # Close database connection
     driver.close()
+
     print("\nNeo4j graph seeded successfully.")
     print("   Open http://localhost:7475 to explore the graph.")
 
