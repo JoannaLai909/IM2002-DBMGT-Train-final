@@ -66,7 +66,7 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
                 ) YIELD path, weight
                 
                 RETURN weight AS total_time_min,
-                       [n IN nodes(path) | {station_id: n.station_id, name: n.name}] AS path
+                       [n IN nodes(path) | {{station_id: n.station_id, name: n.name}}] AS path
                 """
             
             # Execute Cypher query
