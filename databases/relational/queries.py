@@ -262,6 +262,11 @@ def query_national_rail_fare(
     fare_class: str,
     stops_travelled: int,
 ) -> Optional[dict]:
+    
+    try:
+        stops_travelled = int(stops_travelled)
+    except (TypeError, ValueError):
+        return None
 
     sql = """
         SELECT fare_classes
@@ -342,6 +347,11 @@ def query_metro_schedules(origin_id: str, destination_id: str) -> list[dict]:
 
 
 def query_metro_fare(schedule_id: str, stops_travelled: int) -> Optional[dict]:
+
+    try:
+        stops_travelled = int(stops_travelled)
+    except (TypeError, ValueError):
+        return None
 
     sql = """
         SELECT
