@@ -43,10 +43,10 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
             # If network is auto, allow cross-network routing (metro + rail)
             if network == "auto":
                 cypher = """
-                MATCH (start:Station {station_id: $origin})
-                MATCH (end:Station {station_id: $destination})
+                MATCH (start {station_id: $origin})
+                MATCH (end {station_id: $destination})
                 
-                # Run APOC Dijkstra using travel_time_min as weight
+                // Run APOC Dijkstra using travel_time_min as weight
                 CALL apoc.algo.dijkstra(
                     start, end, 'CONNECTED_TO|INTERCHANGE_TO', 'travel_time_min'
                 ) YIELD path, weight
@@ -55,10 +55,11 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
                        [n IN nodes(path) | {station_id: n.station_id, name: n.name}] AS path
                 """
             else:
-                # Restrict routing within same network only
-                cypher = """
-                MATCH (start:Station {station_id: $origin, network: $network})
-                MATCH (end:Station {station_id: $destination, network: $network})
+                # Dynamically match specific network label (:Metro or :Rail) for optimized lookup
+                label = "Metro" if network == "metro" else "Rail"
+                cypher = f"""
+                MATCH (start:{label} {{station_id: $origin}})
+                MATCH (end:{label} {{station_id: $destination}})
                 
                 CALL apoc.algo.dijkstra(
                     start, end, 'CONNECTED_TO', 'travel_time_min'
@@ -121,24 +122,25 @@ def query_alternative_routes(origin_id: str, destination_id: str, avoid_station_
             
             if network == "auto":
                 cypher = """
-                MATCH (start:Station {station_id: $origin})
-                MATCH (end:Station {station_id: $destination})
+                MATCH (start {station_id: $origin})
+                MATCH (end {station_id: $destination})
                 
-                # Find all shortest paths between two stations
+                // Find all shortest paths between two stations
                 MATCH p = allShortestPaths(
                     (start)-[:CONNECTED_TO|INTERCHANGE_TO*..15]->(end)
                 )
                 
-                # Exclude paths that contain avoided station
+                // Exclude paths that contain avoided station
                 WHERE NONE(n IN nodes(p) WHERE n.station_id = $avoid)
                 
                 RETURN p
                 LIMIT $limit
                 """
             else:
+                label = "Metro" if network == "metro" else "Rail"
                 cypher = f"""
-                MATCH (start:Station {{station_id: $origin, network: '{network}'}})
-                MATCH (end:Station {{station_id: $destination, network: '{network}'}})
+                MATCH (start:{label} {{station_id: $origin}})
+                MATCH (end:{label} {{station_id: $destination}})
                 
                 MATCH p = allShortestPaths(
                     (start)-[:CONNECTED_TO*..15]->(end)
@@ -181,10 +183,10 @@ def query_interchange_path(origin_id: str, destination_id: str) -> dict:
         with driver.session() as session:
 
             result = session.run("""
-            MATCH (start:Station {station_id: $origin})
-            MATCH (end:Station {station_id: $destination})
+            MATCH (start {station_id: $origin})
+            MATCH (end {station_id: $destination})
 
-            # Find shortest path including transfer edges
+            // Find shortest path including transfer edges
             MATCH p = shortestPath(
                 (start)-[:CONNECTED_TO|INTERCHANGE_TO*..20]->(end)
             )
@@ -221,14 +223,14 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
     # Clamp hops to avoid excessive graph traversal
     hops = max(1, min(hops, 10))
 
+    # Match regardless of label to identify the source station node
     cypher = f"""
-    MATCH (s:Station {{station_id: $id}})
+    MATCH (s {{station_id: $id}})
     
-    # Traverse up to N hops from delayed station
+    // Traverse up to N hops from delayed station
     MATCH p = (s)-[:CONNECTED_TO*1..{hops}]-(n)
 
     WHERE n.station_id <> s.station_id
-      AND n.network = s.network
 
     RETURN DISTINCT
            n.station_id AS station_id,
@@ -267,7 +269,7 @@ def query_station_connections(station_id: str) -> list[dict]:
         with driver.session() as session:
 
             result = session.run("""
-            MATCH (s:Station {station_id: $id})
+            MATCH (s {station_id: $id})
                   -[r:CONNECTED_TO|INTERCHANGE_TO]->
                   (n)
 

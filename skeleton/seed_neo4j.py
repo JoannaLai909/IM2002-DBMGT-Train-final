@@ -53,7 +53,7 @@ def seed():
 
         for s in metro_stations:
             session.run("""
-                MERGE (station:Station {station_id: $id})
+                MERGE (station:Metro {station_id: $id})
                 SET station.name = $name,
                     station.network = 'metro',
                     station.lines = $lines
@@ -63,7 +63,7 @@ def seed():
                 "lines": s.get("lines", [])
             })
 
-        print(f"  Created {len(metro_stations)} metro stations")
+        print(f"  Created {len(metro_stations)} metro stations (with :Metro label)")
 
         # ─────────────────────────────────────────────
         # CREATE NATIONAL RAIL STATION NODES
@@ -71,7 +71,7 @@ def seed():
 
         for s in rail_stations:
             session.run("""
-                MERGE (station:Station {station_id: $id})
+                MERGE (station:Rail {station_id: $id})
                 SET station.name = $name,
                     station.network = 'rail',
                     station.lines = $lines
@@ -81,7 +81,7 @@ def seed():
                 "lines": s.get("lines", [])
             })
 
-        print(f"  Created {len(rail_stations)} rail stations")
+        print(f"  Created {len(rail_stations)} rail stations (with :Rail label)")
 
         # ─────────────────────────────────────────────
         # CREATE METRO CONNECTIONS (CONNECTED_TO relationships)
@@ -91,10 +91,10 @@ def seed():
             for adj in s.get("adjacent_stations", []):
 
                 session.run("""
-                    MATCH (a:Station {station_id: $from})
-                    MATCH (b:Station {station_id: $to})
+                    MATCH (a:Metro {station_id: $from})
+                    MATCH (b:Metro {station_id: $to})
 
-                    # Create directed relationship between metro stations
+                    // Create directed relationship between metro stations
                     MERGE (a)-[r:CONNECTED_TO {from_id: $from, to_id: $to}]->(b)
 
                     SET r.travel_time_min = $time,
@@ -115,10 +115,10 @@ def seed():
             for adj in s.get("adjacent_stations", []):
 
                 session.run("""
-                    MATCH (a:Station {station_id: $from})
-                    MATCH (b:Station {station_id: $to})
+                    MATCH (a:Rail {station_id: $from})
+                    MATCH (b:Rail {station_id: $to})
 
-                    # Create directed relationship between rail stations
+                    // Create directed relationship between rail stations
                     MERGE (a)-[r:CONNECTED_TO {from_id: $from, to_id: $to}]->(b)
 
                     SET r.travel_time_min = $time,
@@ -145,12 +145,12 @@ def seed():
 
                 # Metro → Rail transfer edge
                 session.run("""
-                    MATCH (a:Station {station_id: $metro})
-                    MATCH (b:Station {station_id: $rail})
+                    MATCH (a:Metro {station_id: $metro})
+                    MATCH (b:Rail {station_id: $rail})
 
                     MERGE (a)-[r1:INTERCHANGE_TO {from_id: $metro, to_id: $rail}]->(b)
 
-                    # Fixed transfer time (assumption: 5 minutes)
+                    // Fixed transfer time (assumption: 5 minutes)
                     SET r1.transfer_time_min = 5,
                         r1.travel_time_min = 5
                 """, {
@@ -160,8 +160,8 @@ def seed():
 
                 # Rail → Metro transfer edge (bidirectional interchange)
                 session.run("""
-                    MATCH (a:Station {station_id: $rail})
-                    MATCH (b:Station {station_id: $metro})
+                    MATCH (a:Rail {station_id: $rail})
+                    MATCH (b:Metro {station_id: $metro})
 
                     MERGE (a)-[r2:INTERCHANGE_TO {from_id: $rail, to_id: $metro}]->(b)
 
