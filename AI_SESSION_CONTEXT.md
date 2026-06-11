@@ -126,6 +126,8 @@ Key properties:
 
 :INTERCHANGE_TO -> transfer_time_min (int, hardcoded as 5)
 
+```
+
 ## Function Signatures We Are Implementing
 
 These are fixed contracts. AI-generated code must match these signatures exactly.
