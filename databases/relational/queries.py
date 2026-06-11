@@ -149,10 +149,22 @@ def query_national_rail_availability(
     Return national rail schedules that serve both the origin and destination
     in the correct stop order.
 
-    The function also calculates available_seats because the live test expects
-    each schedule result to include remaining seat capacity, not just booked seats.
-    Seat capacity is derived from the JSONB seat layout table.
+    Args:
+        origin_id: National rail origin station ID, e.g. "NR01".
+        destination_id: National rail destination station ID, e.g. "NR05".
+        travel_date: Optional travel date in YYYY-MM-DD format. Values such as
+            None, "", "None", or "null" are treated as unspecified.
+
+    Returns:
+        A list of schedule dictionaries. Each result includes route metadata,
+        stops_travelled, booked_seats, total_seats, and available_seats.
     """
+
+    # Ollama may sometimes pass the literal string "None" for optional dates.
+    # Treat those values as missing rather than sending them to PostgreSQL as
+    # an invalid DATE value.
+    if travel_date in (None, "", "None", "none", "NULL", "null"):
+        travel_date = None
 
     sql = """
         SELECT
@@ -181,7 +193,7 @@ def query_national_rail_availability(
 
         LEFT JOIN bookings b
             ON nrs.schedule_id = b.schedule_id
-            AND b.travel_date = %s
+            AND (%s IS NULL OR b.travel_date = %s)
             AND b.status != 'cancelled'
 
         LEFT JOIN national_rail_seat_layouts nrsl
@@ -211,6 +223,7 @@ def query_national_rail_availability(
             cur.execute(
                 sql,
                 (
+                    travel_date,
                     travel_date,
                     origin_id,
                     destination_id,
@@ -249,6 +262,11 @@ def query_national_rail_fare(
     fare_class: str,
     stops_travelled: int,
 ) -> Optional[dict]:
+    
+    try:
+        stops_travelled = int(stops_travelled)
+    except (TypeError, ValueError):
+        return None
 
     sql = """
         SELECT fare_classes
@@ -329,6 +347,11 @@ def query_metro_schedules(origin_id: str, destination_id: str) -> list[dict]:
 
 
 def query_metro_fare(schedule_id: str, stops_travelled: int) -> Optional[dict]:
+
+    try:
+        stops_travelled = int(stops_travelled)
+    except (TypeError, ValueError):
+        return None
 
     sql = """
         SELECT
@@ -1224,3 +1247,4 @@ def store_policy_document(
         with conn.cursor() as cur:
             cur.execute(sql, (title, category, content, vec_str, source_file))
             return cur.fetchone()[0]
+        

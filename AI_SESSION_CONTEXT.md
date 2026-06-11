@@ -88,22 +88,15 @@ policy_documents(id, title, category, content, embedding, source_file, created_a
 
 ## Agreed Graph Schema
 
-<!-- ============================================================
-  FILL THIS IN after your team agrees on Neo4j node labels and
-  relationship types.
-  ============================================================ -->
-
-```
 Node labels:
-:Station
-
-Represents both metro and national rail stations.
+:Metro     - City metro stations
+:Rail      - National rail stations
 
 Key properties:
 - station_id (str)
 - name (str)
 - network ("metro" | "rail")
-- lines (list)
+- line_id (str) 
 
 Relationships:
 
@@ -111,20 +104,17 @@ Relationships:
 - Directional adjacency between stations
 - Properties:
   - travel_time_min (int)
-  - line (str)
+  - line_id (str)  
   - network ("metro" | "rail")
+  - from_id (str) — for MERGE uniqueness
+  - to_id (str) — for MERGE uniqueness
 
 :INTERCHANGE_TO
 - Bidirectional transfer between metro and rail stations
 - Properties:
-  - transfer_time_min (int = 5)
-
-Key properties:
-:Station -> station_id (str), name (str), network (str: "metro" | "rail"), lines (list)
-
-:CONNECTED_TO -> travel_time_min (int), line (str), network (str: "metro" | "rail")
-
-:INTERCHANGE_TO -> transfer_time_min (int, hardcoded as 5)
+  - transfer_time_min (int = 5) 
+  - from_id (str) — for MERGE uniqueness
+  - to_id (str) — for MERGE uniqueness
 
 ```
 
@@ -170,8 +160,6 @@ def query_station_connections(station_id: str) -> list[dict]: ...
 
 ## Team Decisions Log
 
-<!-- Add entries as you make decisions. Format: "Decision: X. Why: Y." -->
-
 - [x] Relational schema is finalized and implemented in `schema.sql`.
 - [x] Schedule stop ordering is stored in separate stop tables using `stop_order`.
 
@@ -205,6 +193,7 @@ def query_station_connections(station_id: str) -> list[dict]: ...
   - failed
   - paid
   - refunded
+
 - [x] register_user() and update_password() store passwords using salted PBKDF2-HMAC-SHA256 hashes instead of plain text.
 
 - [x] login_user() verifies PBKDF2 password hashes and includes a legacy compatibility path for seeded mock users.
@@ -213,13 +202,25 @@ def query_station_connections(station_id: str) -> list[dict]: ...
 
 - [x] execute_cancellation() uses a transaction and row locking with FOR UPDATE to prevent duplicate cancellation updates.
 
-- [x] query_cheapest_route() is deferred to the PostgreSQL layer because fare pricing metrics reside in relational tables.
+- [x] Neo4j Station nodes use separated labels (:Metro and :Rail) instead of a unified :Station label 
+  to ensure clean native database styling and intuitive color differentiation.
 
-- [x] Neo4j Station nodes unify metro + rail into single label (:Station)to simplify routing queries and allow cross-network traversal.
-
-- [x] All shortest path algorithms use travel_time_min as edge weight via APOC Dijkstra (apoc.algo.dijkstra)
+- [x] All shortest path algorithms use travel_time_min as edge weight via APOC Dijkstra (apoc.algo.dijkstra).
 
 - [x] INTERCHANGE_TO edges are bidirectional to ensure shortestPath can traverse metro ↔ rail without direction bias.
+
+- [x] query_shortest_route() and query_alternative_routes() support three network modes:
+  "auto" (cross-network via INTERCHANGE_TO), "metro" (metro-only), "rail" (rail-only).
+  Network filtering is applied directly using node labels (:Metro or :Rail) instead of WHERE clause attribute filtering.
+
+- [x] Neo4j seed uses MERGE instead of CREATE for idempotency
+  (seed_neo4j.py can be safely re-run without creating duplicate nodes/edges).
+
+- [x] CONNECTED_TO and INTERCHANGE_TO edges include from_id and to_id properties
+  to ensure unique identification during MERGE operations.
+
+- [x] query_delay_ripple() uses undirected relationship matching -(n)-
+  to model realistic delay propagation (bidirectional network effect).
 
 ## Prompts That Worked
 
