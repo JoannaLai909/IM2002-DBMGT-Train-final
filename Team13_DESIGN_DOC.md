@@ -301,7 +301,7 @@ However, the local Ollama model did not always produce reliable final answers. F
 
 ---
 
-## Section 6 — Reflection and Design Trade-offs
+## Section 6 — Reflection & Trade-offs
 
 ### 6.1 Architectural Design Decisions
 
