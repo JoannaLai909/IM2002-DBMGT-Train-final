@@ -303,16 +303,30 @@ However, the local Ollama model did not always produce reliable final answers. F
 
 ## Section 6 — Reflection and Design Trade-offs
 
-Throughout the development of TransitFlow, several design decisions involved balancing flexibility, simplicity, and database integrity.
+### 6.1 Architectural Design Decisions
 
-One important trade-off was the use of JSONB fields in PostgreSQL. Attributes such as seat layouts, fare classes, operating days, and metro line information were stored as JSONB rather than being fully normalised into separate tables. This simplified the schema and allowed the project to directly reuse the provided mock data. However, the approach sacrifices some relational integrity and makes certain queries more complex. We considered this an acceptable compromise because these structures are typically retrieved as complete objects rather than queried at the individual attribute level.
+**Use of Explicit External Identifiers**
 
-Another design trade-off involved payment records. The system allows payment records to be associated with either national rail bookings or metro travel records. To support this flexibility, the schema does not enforce a strict foreign-key constraint on `payments.booking_id`. This simplifies support for multiple transport systems but reduces the database's ability to enforce referential integrity automatically.
+We chose meaningful VARCHAR-based identifiers instead of auto-incrementing SERIAL keys. Since TransitFlow integrates predefined metro and rail datasets, preserving external IDs simplified data import and ensured consistency across different transport systems.
 
-We also adopted a hybrid database architecture. PostgreSQL was selected for transactional data such as bookings, payments, schedules, and user accounts because relational databases provide strong consistency and support ACID transactions. Neo4j was used for route planning because graph traversal queries are naturally expressed using nodes and relationships. While maintaining two database systems increases implementation complexity, it allows each database technology to be used for the tasks it performs best.
+**Use of JSONB for Semi-Structured Data**
 
-For policy retrieval, we integrated pgvector and Retrieval-Augmented Generation (RAG). This approach allows users to ask policy-related questions using natural language rather than relying on keyword matching. However, vector search introduces additional storage requirements and requires embedding generation during data loading. We considered this worthwhile because it significantly improves the user experience for policy enquiries.
+Seat layouts, fare classes, and operating schedules were stored as JSONB instead of fully normalised tables. This reduced schema complexity and allowed direct reuse of the provided mock data while maintaining acceptable query performance.
 
-Finally, we evaluated both local and cloud-based language models. During development, Ollama provided a cost-effective local solution that could run entirely on our own machines without requiring external API calls. However, local models occasionally produced inconsistent tool selections and less reliable responses compared with larger cloud-hosted models. This highlighted the trade-off between cost, privacy, and model performance when deploying AI-powered systems.
+**Flexible Payment Design**
 
-Overall, the project demonstrates that practical system design often requires balancing strict normalisation, implementation complexity, performance, flexibility, and maintainability. The final architecture reflects these trade-offs while meeting the functional requirements of the TransitFlow system.
+The payments table was designed to support both metro and national rail transactions. To achieve this flexibility, strict foreign-key enforcement was relaxed and validation was handled at the application level.
+
+**Soft Delete Strategy**
+
+Instead of permanently deleting booking records, we used status fields such as `confirmed`, `cancelled`, and `completed`. This preserves transaction history and supports auditing and future analytics.
+
+### 6.2 Transition to Production
+
+**Connection Pooling**
+
+For large-scale deployment, a connection pooler such as PgBouncer would be required to efficiently manage thousands of concurrent database connections.
+
+**Database Migration Management**
+
+In production, schema updates should be handled through migration tools such as Flyway or Prisma Migrate rather than recreating databases. This minimises downtime and supports safe schema evolution.
