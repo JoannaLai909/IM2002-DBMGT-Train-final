@@ -180,6 +180,10 @@ def seed_metro_schedules(cur):
             json.dumps(s.get("operates_on", [])),
         ))
 
+        # Store stop sequences in a separate junction table instead of keeping
+        # them as an array inside metro_schedules. This supports normalised
+        # route queries using stop_order.
+
         for index, station_id in enumerate(s.get("stops_in_order", []), start=1):
             stop_rows.append((
                 s["schedule_id"],
@@ -244,6 +248,10 @@ def seed_national_rail_schedules(cur):
             json.dumps(s.get("operates_on", [])),
         ))
 
+        # National rail stops are inserted into a separate stop table so queries
+        # can compare origin and destination stop_order and calculate
+        # stops_travelled correctly.
+
         for index, station_id in enumerate(s.get("stops_in_order", []), start=1):
             stop_rows.append((
                 s["schedule_id"],
@@ -287,6 +295,9 @@ def seed_national_rail_schedules(cur):
     print(f"  national_rail_schedule_stops: {n2} rows")
 
 
+# Seat layouts are stored as JSONB because coach and seat structures are
+# nested. This avoids creating many extra seat-related tables while still
+# preserving the original mock data structure.
 def seed_seat_layouts(cur):
     data = load("national_rail_seat_layouts.json")
 
