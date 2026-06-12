@@ -443,8 +443,47 @@ def seed_payments(cur):
 
 def seed_feedback(cur):
     data = load("feedback.json")
-    # TODO: Design your table schema, then implement the INSERT logic here.
-    pass
+
+    rows = []
+
+    for f in data:
+        booking_id = f.get("booking_id")
+
+        # feedback.booking_id has a FK to bookings.booking_id.
+        # Some mock feedback records reference metro trip IDs such as MT001,
+        # so we only seed records that reference existing national rail bookings.
+        cur.execute(
+            "SELECT 1 FROM bookings WHERE booking_id = %s",
+            (booking_id,),
+        )
+
+        if not cur.fetchone():
+            continue
+
+        rows.append((
+            f["feedback_id"],
+            booking_id,
+            f["user_id"],
+            f.get("rating"),
+            f.get("comment"),
+            f.get("submitted_at"),
+        ))
+
+    n = insert_many(
+        cur,
+        "feedback",
+        [
+            "feedback_id",
+            "booking_id",
+            "user_id",
+            "rating",
+            "comment",
+            "submitted_at",
+        ],
+        rows,
+    )
+
+    print(f"  feedback: {n} rows")
 
 
 # ── main ─────────────────────────────────────────────────────────────────────
